@@ -1,0 +1,29 @@
+name: Native tab interaction
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/native-interaction.yml'
+      - 'tools/native-interaction/**'
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unchanged simulator guest
+        run: bash scripts/build-tabster.sh iphonesimulator
+      - name: Record native press and drag
+        run: bash tools/native-interaction/capture.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tabster-native-interaction
+          path: target/native-interaction/artifacts/
+          if-no-files-found: error
+          retention-days: 7
