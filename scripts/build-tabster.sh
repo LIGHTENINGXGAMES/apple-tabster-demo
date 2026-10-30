@@ -17,7 +17,7 @@ mkdir -p "$output"
 xcrun --sdk "$sdk" clang -target "$triple" \
     -isysroot "$(xcrun --sdk "$sdk" --show-sdk-path)" \
     -fno-objc-arc -fno-objc-msgsend-selector-stubs -O1 -g \
-    -framework UIKit -framework Foundation -Wl,-no_fixup_chains \
+    -framework UIKit -framework Foundation -framework QuartzCore -framework CoreGraphics -Wl,-no_fixup_chains \
     apps/tabster/main.m apps/tabster/inspection.m -o "$output/Tabster"
 cp apps/tabster/Info.plist "$output/Info.plist"
 codesign --force --sign - "$output"

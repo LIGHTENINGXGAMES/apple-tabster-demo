@@ -56,6 +56,7 @@ void inspectTabster(UITabBarController *tabs, UIWindow *window) {
             NSStringFromCGRect(window.bounds), NSStringFromUIEdgeInsets(window.safeAreaInsets), window.screen.scale,
             NSStringFromCGRect(tabs.tabBar.frame), NSStringFromCGRect(tabs.tabBar.bounds)];
         inspectLayer(tabs.tabBar.layer, report, 0);
+        [UIView setAnimationsEnabled:NO];
         for (NSUInteger selected = 0; selected < 3; ++selected) {
             tabs.selectedIndex = selected;
             [tabs.view layoutIfNeeded];
@@ -73,6 +74,7 @@ void inspectTabster(UITabBarController *tabs, UIWindow *window) {
             [renderer release];
         }
         tabs.selectedIndex = 0;
+        [UIView setAnimationsEnabled:YES];
         [report writeToFile:[directory stringByAppendingPathComponent:@"layers.txt"] atomically:YES encoding:NSUTF8StringEncoding error:NULL];
     });
 }
