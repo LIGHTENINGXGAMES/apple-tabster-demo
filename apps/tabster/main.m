@@ -67,10 +67,12 @@ static void connect_scene(id self, SEL command, UIWindowScene *scene,
 
 int main(int argc, char **argv) {
     Class app = objc_allocateClassPair([NSObject class], "TabsterAppDelegate", 0);
+    class_addProtocol(app, objc_getProtocol("UIApplicationDelegate"));
     class_addMethod(app, sel_registerName("application:didFinishLaunchingWithOptions:"), (IMP)launched, "B@:@@");
     class_addMethod(app, sel_registerName("application:configurationForConnectingSceneSession:options:"), (IMP)configuration, "@@:@@@");
     objc_registerClassPair(app);
     Class scene = objc_allocateClassPair([NSObject class], "TabsterSceneDelegate", 0);
+    class_addProtocol(scene, objc_getProtocol("UIWindowSceneDelegate"));
     class_addMethod(scene, sel_registerName("scene:willConnectToSession:options:"), (IMP)connect_scene, "v@:@@@");
     objc_registerClassPair(scene);
     return UIApplicationMain(argc, argv, nil, string("TabsterAppDelegate"));

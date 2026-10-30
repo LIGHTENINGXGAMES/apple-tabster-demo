@@ -46,7 +46,8 @@ jobs:
           xcrun simctl io "$device" screenshot target/tabster/ios27-native.png
           find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'Tabster*' \
             -exec cp '{}' target/tabster/ \;
-          xcrun simctl spawn "$device" launchctl procinfo "$pid"
+          kill -0 "$pid"
+          test -z "$(find target/tabster -maxdepth 1 -name 'Tabster*.ips' -print -quit)"
           xcrun simctl shutdown "$device"
       - uses: actions/upload-artifact@v4
         if: always()
