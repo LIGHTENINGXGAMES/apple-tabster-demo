@@ -1,0 +1,49 @@
+name: Apple Tabster
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/tabster.yml'
+      - 'apps/tabster/**'
+      - 'scripts/build-tabster.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build iOS 27 arm64 guest
+        run: bash scripts/build-tabster.sh iphoneos
+      - name: Build simulator reference
+        run: bash scripts/build-tabster.sh iphonesimulator
+      - name: Capture native iOS 27 reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          device=$(xcrun simctl list devices available --json | python3 -c '
+          import json,sys
+          devices=json.load(sys.stdin)["devices"]
+          matches=[d["udid"] for runtime,items in devices.items() if "iOS-27-0" in runtime
+                   for d in items if d["name"].startswith("iPhone") and d["isAvailable"]]
+          if not matches: sys.exit("No iOS 27.0 iPhone simulator is installed")
+          print(matches[0])')
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl status_bar "$device" override --time 9:41 --batteryState charged --batteryLevel 100
+          xcrun simctl install "$device" target/tabster/iphonesimulator/Tabster.app
+          xcrun simctl launch "$device" org.lstudio.apple.Tabster
+          sleep 5
+          xcrun simctl io "$device" screenshot target/tabster/ios27-native.png
+          xcrun simctl shutdown "$device"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tabster-ios27
+          path: target/tabster/
+          if-no-files-found: error
+          retention-days: 7

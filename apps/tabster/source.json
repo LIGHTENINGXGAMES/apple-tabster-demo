@@ -1,0 +1,13 @@
+{
+  "title": "Tabster: Various techniques in using UITabBarController",
+  "version": "6.0.1",
+  "url": "https://developer.apple.com/library/archive/samplecode/Tabster/Introduction/Intro.html",
+  "archive_url": "https://developer.apple.com/library/archive/samplecode/Tabster/TabsterVarioustechniquesinusingUITabBarController.zip",
+  "archive_sha256": "a039b099cbbffc3dbdfdb135a1760dfcc20210387b16241115ce977141a526fe",
+  "changes": [
+    "Keep UITabBarController.viewControllers and UITabBarItem initWithTitle:image:tag: from the official sample.",
+    "Replace storyboards and example pages with three programmatically constructed pages.",
+    "Register app and scene delegates dynamically; compile against the real iOS 27 SDK.",
+    "Add full-height colored content and text behind the native tab bar."
+  ]
+}
