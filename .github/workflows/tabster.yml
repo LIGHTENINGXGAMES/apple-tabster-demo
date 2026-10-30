@@ -36,9 +36,17 @@ jobs:
           xcrun simctl bootstatus "$device" -b
           xcrun simctl status_bar "$device" override --time 9:41 --batteryState charged --batteryLevel 100
           xcrun simctl install "$device" target/tabster/iphonesimulator/Tabster.app
-          xcrun simctl launch "$device" org.lstudio.apple.Tabster
+          launch=$(xcrun simctl launch "$device" org.lstudio.apple.Tabster)
+          printf '%s\n' "$launch"
+          pid=${launch##*: }
           sleep 5
+          xcrun simctl spawn "$device" log show --last 3m --style compact \
+            --predicate 'process == "Tabster" OR eventMessage CONTAINS[c] "org.lstudio.apple.Tabster"' \
+            > target/tabster/simulator.log
           xcrun simctl io "$device" screenshot target/tabster/ios27-native.png
+          find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'Tabster*' \
+            -exec cp '{}' target/tabster/ \;
+          xcrun simctl spawn "$device" launchctl procinfo "$pid"
           xcrun simctl shutdown "$device"
       - uses: actions/upload-artifact@v4
         if: always()
