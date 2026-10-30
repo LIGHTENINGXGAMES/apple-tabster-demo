@@ -16,14 +16,16 @@ The isolated `Native tab interaction` workflow runs the same commands on the
 
 Artifacts under `target/native-interaction/artifacts` include:
 
-- `native-drag.mp4`: up to 16 seconds of native display recording.
-- `frames/`: PNG frames at 2, 4, 6, 8, 10, 12, and 14 seconds, where available,
+- `native-drag.mp4`: up to 24 seconds of native display recording.
+- `frames/`: PNG frames every 2 seconds from 2 through 22 seconds, where available,
   extracted with the system AVFoundation framework; `frames.json` records times.
 - `interaction/interaction.jsonl`: accessibility flags, real touch positions,
-  and tab-bar layer presentation geometry sampled at up to 60 Hz for 20 seconds.
+  and tab-bar layer presentation geometry sampled at up to 60 Hz for 35 seconds.
 - `interaction/NN-PHASE.json`: full layer/effect/filter snapshots, initially and
-  0.25 seconds after each touch begins or ends. Filter keys reuse the existing
-  material probe's list; data such as color matrices is encoded as base64.
+  0.25 seconds after each touch begins or ends, 1 second after a touch begins if
+  still held, and once whenever a held pointer has stopped moving for 0.25 seconds.
+  Filter keys combine the existing material probe's list and the filter's own
+  reported `inputKeys`; data such as color matrices is encoded as base64.
 - `released.png`, Xcode build/test logs, and the XCTest result bundle.
 
 The first gesture slowly crosses the second tab center and holds at x=238,

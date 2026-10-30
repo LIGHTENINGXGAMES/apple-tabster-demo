@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <limits.h>
 #import <math.h>
 #import <stdio.h>
@@ -13,6 +14,11 @@ static void (*originalSendEvent)(UIApplication *, SEL, UIEvent *);
 static NSArray *fullFilterKeys;
 static char diagnosticPath[PATH_MAX];
 static NSUncaughtExceptionHandler *previousExceptionHandler;
+typedef NS_ENUM(NSUInteger, TouchObservation) { TouchInactive, TouchWaitingForPause, TouchPauseRecorded };
+static TouchObservation touchObservation;
+static uintptr_t observedTouch;
+static NSUInteger touchGeneration;
+static CFTimeInterval lastMovement;
 static void snapshot(NSString *name);
 
 static void diagnostic(NSString *message) {
@@ -116,6 +122,24 @@ static NSString *phase(UITouchPhase value) {
 static void observeEvent(UIApplication *application, SEL command, UIEvent *event) {
     @try {
     for (UITouch *touch in event.allTouches) {
+        uintptr_t pointerID = (uintptr_t)(__bridge void *)touch;
+        if (touch.phase == UITouchPhaseBegan) {
+            observedTouch = pointerID;
+            ++touchGeneration;
+            touchObservation = TouchWaitingForPause;
+            lastMovement = CACurrentMediaTime();
+            NSUInteger generation = touchGeneration;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                if (generation == touchGeneration && touchObservation != TouchInactive) snapshot(@"began-held");
+            });
+        } else if (pointerID == observedTouch) {
+            if (touch.phase == UITouchPhaseMoved) {
+                lastMovement = CACurrentMediaTime();
+                touchObservation = TouchWaitingForPause;
+            } else if (touch.phase == UITouchPhaseEnded || touch.phase == UITouchPhaseCancelled) {
+                touchObservation = TouchInactive;
+            }
+        }
         emit(@{
             @"kind": @"touch", @"t": @(CACurrentMediaTime() - started),
             @"eventTime": @(touch.timestamp), @"id": identity(touch),
@@ -153,8 +177,20 @@ static NSArray *filters(CALayer *layer, BOOL full) {
                 NSMutableDictionary *entry = [NSMutableDictionary dictionary];
                 entry[@"slot"] = key;
                 entry[@"name"] = [filter valueForKey:@"name"] ?: NSStringFromClass([filter class]);
-                NSArray *keys = full ? fullFilterKeys : @[@"inputAmount", @"inputInnerRefractionAmount",
+                NSArray *keys = @[@"inputAmount", @"inputInnerRefractionAmount",
                      @"inputOuterRefractionAmount", @"inputRefractionOpacity", @"inputBlurRadius"];
+                if (full) {
+                    NSMutableOrderedSet *all = [NSMutableOrderedSet orderedSetWithArray:fullFilterKeys];
+                    SEL inputKeys = NSSelectorFromString(@"inputKeys");
+                    @try {
+                        if ([filter respondsToSelector:inputKeys]) {
+                            id reported = ((id (*)(id, SEL))objc_msgSend)(filter, inputKeys);
+                            if ([reported isKindOfClass:NSArray.class]) [all addObjectsFromArray:reported];
+                            else if ([reported isKindOfClass:NSSet.class]) [all addObjectsFromArray:[reported allObjects]];
+                        }
+                    } @catch (NSException *exception) { (void)exception; }
+                    keys = all.array;
+                }
                 for (NSString *input in keys) {
                     @try {
                         id parameter = [filter valueForKey:input];
@@ -180,7 +216,9 @@ static void layers(CALayer *layer, CALayer *root, NSMutableArray *result, BOOL f
         @"frame": rect(visible.frame), @"bounds": rect(visible.bounds),
         @"position": point(visible.position), @"anchor": point(visible.anchorPoint),
         @"screenRect": rect([visible convertRect:visible.bounds toLayer:root]),
-        @"modelFrame": rect(layer.frame), @"opacity": @(visible.opacity),
+        @"modelFrame": rect(layer.frame), @"modelBounds": rect(layer.bounds),
+        @"modelPosition": point(layer.position), @"modelOpacity": @(layer.opacity),
+        @"opacity": @(visible.opacity),
         @"cornerRadius": @(visible.cornerRadius), @"masksToBounds": @(layer.masksToBounds),
         @"transform": @[@(a.m11), @(a.m12), @(a.m13), @(a.m14),
                         @(a.m21), @(a.m22), @(a.m23), @(a.m24),
@@ -242,11 +280,15 @@ static void snapshot(NSString *name) {
 @implementation TabsterInteractionObserver
 - (void)sample:(CADisplayLink *)link {
     @try {
-    if (CACurrentMediaTime() - started > 20) {
+    if (CACurrentMediaTime() - started > 35) {
         [link invalidate];
         self.displayLink = nil;
         if (output) { fclose(output); output = NULL; }
         return;
+    }
+    if (touchObservation == TouchWaitingForPause && CACurrentMediaTime() - lastMovement >= 0.25) {
+        touchObservation = TouchPauseRecorded;
+        snapshot(@"held-pause");
     }
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (![scene isKindOfClass:UIWindowScene.class]) continue;

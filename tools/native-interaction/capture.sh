@@ -93,7 +93,7 @@ done
 test -s "$data/Documents/interaction/interaction.jsonl"
 xcrun simctl io "$device" recordVideo --codec=h264 "$output/native-drag.mp4" > "$output/video.log" 2>&1 &
 video_pid=$!
-(sleep 16; kill -INT "$video_pid" 2>/dev/null || true) &
+(sleep 24; kill -INT "$video_pid" 2>/dev/null || true) &
 timer_pid=$!
 wait "$test_pid"
 test -s "$data/Documents/interaction/interaction.jsonl"
