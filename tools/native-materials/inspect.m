@@ -87,7 +87,9 @@ static UIControl *secondTab(UIView *view, NSUInteger *index) {
 
 __attribute__((constructor)) static void install(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        filterKeys = [[NSString stringWithContentsOfFile:@"/tmp/tabster-filter-keys.txt" encoding:NSUTF8StringEncoding error:NULL] componentsSeparatedByString:@"\n"];
+        filterKeys = @[
+#include "input-keys.inc"
+        ];
         writeReport(@"settled.txt");
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
             if (![scene isKindOfClass:UIWindowScene.class]) continue;
@@ -96,6 +98,9 @@ __attribute__((constructor)) static void install(void) {
                 UIControl *tab = secondTab(window.rootViewController.view, &index);
                 [tab sendActionsForControlEvents:UIControlEventTouchDown];
                 [tab sendActionsForControlEvents:UIControlEventTouchUpInside];
+                if ([window.rootViewController isKindOfClass:UITabBarController.class]) {
+                    ((UITabBarController *)window.rootViewController).selectedIndex = 1;
+                }
             }
         }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 60), dispatch_get_main_queue(), ^{ writeReport(@"transition.txt"); });
