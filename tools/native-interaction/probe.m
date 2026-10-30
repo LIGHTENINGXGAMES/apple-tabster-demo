@@ -1,6 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <limits.h>
+#import <math.h>
 #import <stdio.h>
 
 // A simulator-only observer. It does not change selection, dispatch actions,
@@ -9,17 +11,61 @@ static FILE *output;
 static CFTimeInterval started;
 static void (*originalSendEvent)(UIApplication *, SEL, UIEvent *);
 static NSArray *fullFilterKeys;
+static char diagnosticPath[PATH_MAX];
+static NSUncaughtExceptionHandler *previousExceptionHandler;
 static void snapshot(NSString *name);
 
+static void diagnostic(NSString *message) {
+    if (!diagnosticPath[0]) return;
+    FILE *file = fopen(diagnosticPath, "a");
+    if (!file) return;
+    fprintf(file, "[%.6f] %s\n", CACurrentMediaTime() - started, message.UTF8String ?: "Unknown probe error");
+    fclose(file);
+}
+
+static void exceptionDiagnostic(NSString *context, NSException *exception) {
+    diagnostic([NSString stringWithFormat:@"%@: %@: %@\n%@", context,
+        exception.name, exception.reason, [exception.callStackSymbols componentsJoinedByString:@"\n"]]);
+}
+
+static void uncaughtException(NSException *exception) {
+    exceptionDiagnostic(@"Uncaught exception", exception);
+    if (previousExceptionHandler) previousExceptionHandler(exception);
+}
+
 static id jsonValue(id value) {
-    if ([value isKindOfClass:NSNumber.class] || [value isKindOfClass:NSString.class]) return value;
+    if (!value || value == NSNull.null) return NSNull.null;
+    if ([value isKindOfClass:NSNumber.class]) {
+        double number = [value doubleValue];
+        if (isnan(number)) return @"NaN";
+        if (!isfinite(number)) return number < 0 ? @"-Infinity" : @"Infinity";
+        return value;
+    }
+    if ([value isKindOfClass:NSString.class]) return value;
     if ([value isKindOfClass:NSData.class]) return @{@"type": @"data", @"base64": [value base64EncodedStringWithOptions:0]};
     if ([value isKindOfClass:NSArray.class]) {
         NSMutableArray *items = [NSMutableArray array];
         for (id item in value) [items addObject:jsonValue(item)];
         return items;
     }
+    if ([value isKindOfClass:NSDictionary.class]) {
+        NSMutableDictionary *items = [NSMutableDictionary dictionary];
+        for (id key in value) items[[key description]] = jsonValue(value[key]);
+        return items;
+    }
     return [value description] ?: @"";
+}
+
+static NSData *serialize(NSDictionary *value, NSJSONWritingOptions options) {
+    @try {
+        NSError *error = nil;
+        NSData *data = [NSJSONSerialization dataWithJSONObject:jsonValue(value) options:options error:&error];
+        if (!data) diagnostic([NSString stringWithFormat:@"JSON serialization failed: %@", error]);
+        return data;
+    } @catch (NSException *exception) {
+        exceptionDiagnostic(@"JSON serialization", exception);
+        return nil;
+    }
 }
 
 static NSDictionary *effectValues(id object) {
@@ -49,7 +95,7 @@ static NSString *identity(id object) { return [NSString stringWithFormat:@"%p", 
 
 static void emit(NSDictionary *value) {
     if (!output) return;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:NULL];
+    NSData *data = serialize(value, 0);
     if (!data) return;
     fwrite(data.bytes, 1, data.length, output);
     fputc('\n', output);
@@ -68,6 +114,7 @@ static NSString *phase(UITouchPhase value) {
 }
 
 static void observeEvent(UIApplication *application, SEL command, UIEvent *event) {
+    @try {
     for (UITouch *touch in event.allTouches) {
         emit(@{
             @"kind": @"touch", @"t": @(CACurrentMediaTime() - started),
@@ -80,6 +127,9 @@ static void observeEvent(UIApplication *application, SEL command, UIEvent *event
             NSString *name = phase(touch.phase);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 4), dispatch_get_main_queue(), ^{ snapshot(name); });
         }
+    }
+    } @catch (NSException *exception) {
+        exceptionDiagnostic(@"Touch observation", exception);
     }
     originalSendEvent(application, command, event);
 }
@@ -158,6 +208,7 @@ static void layers(CALayer *layer, CALayer *root, NSMutableArray *result, BOOL f
 
 static void snapshot(NSString *name) {
     if (!output) return;
+    @try {
     static NSUInteger sequence = 0;
     NSMutableArray *windows = [NSMutableArray array];
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
@@ -173,11 +224,15 @@ static void snapshot(NSString *name) {
         @"reduceMotion": @(UIAccessibilityIsReduceMotionEnabled()),
         @"reduceTransparency": @(UIAccessibilityIsReduceTransparencyEnabled()),
         @"increaseContrast": @(UIAccessibilityDarkerSystemColorsEnabled())};
-    NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingPrettyPrinted error:NULL];
+    NSData *data = serialize(value, NSJSONWritingPrettyPrinted);
+    if (!data) return;
     NSString *directory = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/interaction"];
     NSString *filename = [NSString stringWithFormat:@"%02lu-%@.json", (unsigned long)sequence++, name];
     [data writeToFile:[directory stringByAppendingPathComponent:filename] atomically:YES];
     emit(@{@"kind": @"snapshot", @"t": value[@"t"], @"file": filename});
+    } @catch (NSException *exception) {
+        exceptionDiagnostic(@"Material snapshot", exception);
+    }
 }
 
 @interface TabsterInteractionObserver : NSObject
@@ -186,6 +241,7 @@ static void snapshot(NSString *name) {
 
 @implementation TabsterInteractionObserver
 - (void)sample:(CADisplayLink *)link {
+    @try {
     if (CACurrentMediaTime() - started > 20) {
         [link invalidate];
         self.displayLink = nil;
@@ -204,6 +260,9 @@ static void snapshot(NSString *name) {
                    @"layers": samples});
         }
     }
+    } @catch (NSException *exception) {
+        exceptionDiagnostic(@"Presentation sampling", exception);
+    }
 }
 @end
 
@@ -215,6 +274,9 @@ __attribute__((constructor)) static void install(void) {
     ];
     NSString *directory = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/interaction"];
     [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:NULL];
+    snprintf(diagnosticPath, sizeof(diagnosticPath), "%s", [directory stringByAppendingPathComponent:@"probe-errors.log"].fileSystemRepresentation);
+    previousExceptionHandler = NSGetUncaughtExceptionHandler();
+    NSSetUncaughtExceptionHandler(uncaughtException);
     output = fopen([directory stringByAppendingPathComponent:@"interaction.jsonl"].fileSystemRepresentation, "w");
     emit(@{@"kind": @"environment", @"t": @0,
            @"os": NSProcessInfo.processInfo.operatingSystemVersionString,

@@ -4,6 +4,7 @@ cd "$(dirname "$0")/../.."
 output=target/native-interaction/artifacts
 derived=target/native-interaction/DerivedData
 mkdir -p "$output"
+capture_started=$(date +%s)
 runtime=$(xcrun simctl list runtimes --json | python3 -c '
 import json,sys
 matches=[r["identifier"] for r in json.load(sys.stdin)["runtimes"]
@@ -15,6 +16,8 @@ video_pid=
 timer_pid=
 data=
 cleanup() {
+    local status=$?
+    set +e
     if [[ -n "$timer_pid" ]]; then kill "$timer_pid" 2>/dev/null || true; fi
     if [[ -n "$video_pid" ]]; then
         kill -INT "$video_pid" 2>/dev/null || true
@@ -27,9 +30,33 @@ cleanup() {
     if [[ -n "$data" && -d "$data/Documents/interaction" ]]; then
         cp -R "$data/Documents/interaction" "$output/"
     fi
+    xcrun simctl spawn "$device" log show --last 10m --style compact \
+        --predicate 'process == "Tabster" OR eventMessage CONTAINS[c] "org.lstudio.apple.Tabster"' \
+        > "$output/simulator.log" 2> "$output/simulator-log-errors.log"
+    python3 - "$output" "$device" "$capture_started" > "$output/crash-collection.log" 2>&1 <<'PY'
+import pathlib,shutil,sys
+output,device,started=pathlib.Path(sys.argv[1]),sys.argv[2],float(sys.argv[3])
+roots=[pathlib.Path.home()/'Library/Logs/DiagnosticReports',
+       pathlib.Path.home()/f'Library/Developer/CoreSimulator/Devices/{device}/data/Library/Logs/CrashReporter']
+destination=output/'crashes'
+destination.mkdir(exist_ok=True)
+for index,root in enumerate(roots):
+    if not root.exists(): continue
+    for source in root.rglob('Tabster*'):
+        if source.suffix not in ('.ips','.crash') or not source.is_file(): continue
+        if source.stat().st_mtime < started-60: continue
+        target=destination/f'{index}-{source.name}'
+        shutil.copy2(source,target)
+        print(f'{source} -> {target}')
+PY
+    if [[ -d "$output/NativeInteraction.xcresult" ]]; then
+        xcrun xcresulttool export diagnostics --path "$output/NativeInteraction.xcresult" \
+            --output-path "$output/xcresult-diagnostics" > "$output/xcresult-diagnostics.log" 2>&1
+    fi
     xcrun simctl io "$device" screenshot "$output/released.png" || true
     xcrun simctl shutdown "$device" || true
     xcrun simctl delete "$device" || true
+    return "$status"
 }
 trap cleanup EXIT
 xcodebuild -version > "$output/xcode.txt"
