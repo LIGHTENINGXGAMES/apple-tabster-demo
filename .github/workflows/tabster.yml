@@ -7,6 +7,7 @@ on:
       - '.github/workflows/tabster.yml'
       - 'apps/tabster/**'
       - 'scripts/build-tabster.sh'
+      - 'tools/native-materials/**'
 
 permissions:
   contents: read
@@ -36,10 +37,16 @@ jobs:
           xcrun simctl bootstatus "$device" -b
           xcrun simctl status_bar "$device" override --time 9:41 --batteryState charged --batteryLevel 100
           xcrun simctl install "$device" target/tabster/iphonesimulator/Tabster.app
-          launch=$(xcrun simctl launch "$device" org.lstudio.apple.Tabster)
+          xcrun --sdk iphonesimulator clang -target arm64-apple-ios27.0-simulator \
+            -dynamiclib -fobjc-arc -framework UIKit -framework QuartzCore -framework Foundation \
+            tools/native-materials/inspect.m -o /tmp/tabster-materials.dylib
+          cp tools/native-materials/input-keys.txt /tmp/tabster-filter-keys.txt
+          launch=$(SIMCTL_CHILD_DYLD_INSERT_LIBRARIES=/tmp/tabster-materials.dylib xcrun simctl launch "$device" org.lstudio.apple.Tabster)
           printf '%s\n' "$launch"
           pid=${launch##*: }
-          sleep 5
+          sleep 7
+          data=$(xcrun simctl get_app_container "$device" org.lstudio.apple.Tabster data)
+          cp -R "$data/Documents/materials" target/tabster/materials
           xcrun simctl spawn "$device" log show --last 3m --style compact \
             --predicate 'process == "Tabster" OR eventMessage CONTAINS[c] "org.lstudio.apple.Tabster"' \
             > target/tabster/simulator.log
