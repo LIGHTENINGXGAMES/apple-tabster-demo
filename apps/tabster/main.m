@@ -8,11 +8,6 @@
  */
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <TargetConditionals.h>
-
-#if TARGET_OS_SIMULATOR
-extern void inspectTabster(UITabBarController *, UIWindow *);
-#endif
 
 static NSString *string(const char *value) {
     return [NSString stringWithUTF8String:value];
@@ -68,9 +63,6 @@ static void connect_scene(id self, SEL command, UIWindowScene *scene,
     tabs.viewControllers = [NSArray arrayWithObjects:controllers count:3];
     window.rootViewController = tabs;
     [window makeKeyAndVisible];
-#if TARGET_OS_SIMULATOR
-    inspectTabster(tabs, window);
-#endif
 }
 
 int main(int argc, char **argv) {

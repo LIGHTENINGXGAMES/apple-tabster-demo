@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/LIGHTENINGXGAMES/apple-tabster-demo",
+  "commit": "a636d3c8cb455571e0f6dcdf758dcc696553eca2",
+  "workflow_run": 41068474856,
+  "artifact_id": 12984706196,
+  "binary": "iphoneos/Tabster.app/Tabster",
+  "sha256": "837bdf8906fde3436bf411fd493ff14ea5f4d819744865cbbf7c051941d1d4bc",
+  "architecture": "arm64",
+  "minimum_ios": "27.0",
+  "sdk": "27.1"
+}
