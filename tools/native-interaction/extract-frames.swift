@@ -11,7 +11,7 @@ generator.appliesPreferredTrackTransform = true
 generator.requestedTimeToleranceBefore = .zero
 generator.requestedTimeToleranceAfter = .zero
 var frames: [[String: Any]] = []
-for seconds in [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22] where Double(seconds) < duration {
+for seconds in stride(from: 2, through: 48, by: 2) where Double(seconds) < duration {
     var actual = CMTime.zero
     let image = try generator.copyCGImage(at: CMTime(seconds: Double(seconds), preferredTimescale: 600), actualTime: &actual)
     let bitmap = NSBitmapImageRep(cgImage: image)

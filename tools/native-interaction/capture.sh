@@ -4,6 +4,13 @@ cd "$(dirname "$0")/../.."
 output=target/native-interaction/artifacts
 derived=target/native-interaction/DerivedData
 mkdir -p "$output"
+scenario=${TABSTER_INTERACTION_SCENARIO:-boundaries}
+case "$scenario" in
+    boundaries) test_method=testDragBoundaries ;;
+    held-drag) test_method=testHeldTabDrag ;;
+    *) echo "Unknown native interaction scenario: $scenario" >&2; exit 2 ;;
+esac
+printf '%s\n' "$scenario" > "$output/scenario.txt"
 capture_started=$(date +%s)
 runtime=$(xcrun simctl list runtimes --json | python3 -c '
 import json,sys
@@ -76,7 +83,8 @@ xcodebuild -project "$project" -scheme NativeInteraction -configuration Debug \
 xcodebuild -project "$project" -scheme NativeInteraction -configuration Debug \
     -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$derived" \
     -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
-    -test-timeouts-enabled YES -maximum-test-execution-time-allowance 45 \
+    -test-timeouts-enabled YES -maximum-test-execution-time-allowance 75 \
+    "-only-testing:NativeInteractionTests/NativeInteractionTests/$test_method" \
     -resultBundlePath "$output/NativeInteraction.xcresult" \
     CODE_SIGNING_ALLOWED=NO test-without-building > "$output/test.log" 2>&1 &
 test_pid=$!
@@ -93,7 +101,7 @@ done
 test -s "$data/Documents/interaction/interaction.jsonl"
 xcrun simctl io "$device" recordVideo --codec=h264 "$output/native-drag.mp4" > "$output/video.log" 2>&1 &
 video_pid=$!
-(sleep 24; kill -INT "$video_pid" 2>/dev/null || true) &
+(sleep 50; kill -INT "$video_pid" 2>/dev/null || true) &
 timer_pid=$!
 wait "$test_pid"
 test -s "$data/Documents/interaction/interaction.jsonl"

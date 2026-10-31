@@ -5,6 +5,34 @@
 
 @implementation NativeInteractionTests
 
+- (void)testDragBoundaries {
+    self.continueAfterFailure = NO;
+    XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:@"org.lstudio.apple.Tabster"];
+    app.launchEnvironment = @{
+        @"DYLD_INSERT_LIBRARIES": @"/tmp/tabster-interaction.dylib",
+        @"TABSTER_INTERACTION_PROBE": @"1"
+    };
+    [app launch];
+    XCTAssertTrue([app.windows.firstMatch waitForExistenceWithTimeout:10]);
+    CGRect frame = app.frame;
+    XCTAssertEqualWithAccuracy(frame.size.width, 390, 0.5);
+    XCTAssertEqualWithAccuracy(frame.size.height, 844, 0.5);
+    XCUICoordinate *origin = [app coordinateWithNormalizedOffset:CGVectorMake(0, 0)];
+    const CGVector endpoints[] = {{5, 792}, {385, 792}, {195, 692}, {195, 832}};
+    [NSThread sleepForTimeInterval:2];
+    for (NSUInteger index = 0; index < 4; ++index) {
+        XCUICoordinate *start = [origin coordinateWithOffset:CGVectorMake(195, 792)];
+        XCUICoordinate *end = [origin coordinateWithOffset:endpoints[index]];
+        [start pressForDuration:0.5 thenDragToCoordinate:end withVelocity:80 thenHoldForDuration:1];
+        [NSThread sleepForTimeInterval:1];
+    }
+    XCTAttachment *attachment = [XCTAttachment attachmentWithScreenshot:XCUIScreen.mainScreen.screenshot];
+    attachment.name = @"boundaries-released";
+    attachment.lifetime = XCTAttachmentLifetimeKeepAlways;
+    [self addAttachment:attachment];
+    XCTAssertEqual(app.state, XCUIApplicationStateRunningForeground);
+}
+
 - (void)testHeldTabDrag {
     self.continueAfterFailure = NO;
     XCUIApplication *app = [[XCUIApplication alloc] initWithBundleIdentifier:@"org.lstudio.apple.Tabster"];

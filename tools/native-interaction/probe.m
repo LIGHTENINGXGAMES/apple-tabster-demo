@@ -280,7 +280,7 @@ static void snapshot(NSString *name) {
 @implementation TabsterInteractionObserver
 - (void)sample:(CADisplayLink *)link {
     @try {
-    if (CACurrentMediaTime() - started > 35) {
+    if (CACurrentMediaTime() - started > 60) {
         [link invalidate];
         self.displayLink = nil;
         if (output) { fclose(output); output = NULL; }

@@ -2,6 +2,15 @@ name: Native tab interaction
 
 on:
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: Native interaction scenario
+        required: true
+        type: choice
+        default: boundaries
+        options:
+          - boundaries
+          - held-drag
   push:
     paths:
       - '.github/workflows/native-interaction.yml'
@@ -19,6 +28,8 @@ jobs:
       - name: Build unchanged simulator guest
         run: bash scripts/build-tabster.sh iphonesimulator
       - name: Record native press and drag
+        env:
+          TABSTER_INTERACTION_SCENARIO: ${{ inputs.scenario || 'boundaries' }}
         run: bash tools/native-interaction/capture.sh
       - uses: actions/upload-artifact@v4
         if: always()
